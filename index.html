@@ -15,6 +15,7 @@
             justify-content: center;
             min-height: 100%;
 
+            font-family: sans-serif;
             user-select: none;
         }
 
@@ -80,8 +81,8 @@
 
             padding: var(--extra-render-space) 0;
 
-
             overflow: hidden;
+            pointer-events: none;
         }
 
         #hand > :first-child {
@@ -93,6 +94,8 @@
             transform-origin: 50% 0;
 
             transition: transform 0.2s ease-out;
+
+            pointer-events: all;
         }
 
         #hand > :last-child {
@@ -231,26 +234,56 @@
     </slot>
 </template>
 <template id="game-goal">
+    <style>
+        svg {
+            width: 100%;
+            height: 100%;
+        }
+    </style>
     <svg viewBox="-1 -1 8 8">
         <polygon points="0,2 5,6 3,0 1,6 6,2" fill="currentColor"/>
     </svg>
 </template>
 <template id="game-left">
+    <style>
+        svg {
+            width: 100%;
+            height: 100%;
+        }
+    </style>
     <svg viewBox="-1 -1 4 4">
         <polygon points="2,0 2,2 0,1" fill="currentColor"/>
     </svg>
 </template>
 <template id="game-right">
+    <style>
+        svg {
+            width: 100%;
+            height: 100%;
+        }
+    </style>
     <svg viewBox="-1 -1 4 4">
         <polygon points="0,0 0,2 2,1" fill="currentColor"/>
     </svg>
 </template>
 <template id="game-straight">
+    <style>
+        svg {
+            width: 100%;
+            height: 100%;
+        }
+    </style>
     <svg viewBox="-1 -1 4 4">
         <polygon points="0,0 2,0 1,2" fill="currentColor"/>
     </svg>
 </template>
 <template id="game-split">
+    <style>
+        svg {
+            width: 100%;
+            height: 100%;
+        }
+    </style>
     <svg viewBox="-2 -2 6 6">
         <polygon points="-1,1 0,2 2,2 3,1 2,0 0,0" fill="currentColor"/>
     </svg>
@@ -360,7 +393,7 @@
 
     function extractGameDropEvent(event) {
         const raw = event.dataTransfer.getData("application/json");
-        if (raw == null) {
+        if (raw == null || raw === "") {
             return null;
         }
 
@@ -390,12 +423,15 @@
         });
 
         element.addEventListener("dragover", event => {
+            // Chrome is a dum-dum:
+            // https://stackoverflow.com/questions/28487352/dragndrop-datatransfer-getdata-empty
+            const isDecentBrowser = !navigator.userAgent.match(/chrome/i);
             const gameEvent = extractGameDropEvent(event);
-            if (gameEvent == null) {
+            if (isDecentBrowser && gameEvent == null) {
                 return;
             }
 
-            const isPlacement = gameEvent.event === PLACE_EVENT;
+            const isPlacement = !isDecentBrowser || gameEvent.event === PLACE_EVENT;
             element.classList.toggle("dropping", isPlacement);
             event.preventDefault();
         });

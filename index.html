@@ -1,0 +1,701 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Ludum Dare 48</title>
+    <style>
+        * {
+            box-sizing: border-box;
+        }
+
+        html {
+            --border-radius: .4em;
+
+            display: flex;
+            justify-content: center;
+            min-height: 100%;
+
+            user-select: none;
+        }
+
+        body {
+            position: relative;
+
+            display: inline-flex;
+            flex-direction: column;
+            align-items: center;
+
+            margin: 0;
+        }
+
+        #field {
+            --cell-size: 3.5em;
+
+            position: relative;
+            flex: 1;
+            display: inline-grid;
+            grid-template-columns: repeat(7, var(--cell-size));
+            grid-auto-rows: var(--cell-size);
+
+            padding-bottom: calc(var(--cell-size) * 3);
+
+            --crap-score: rgba(231, 174, 62, 0.5);
+            --mild-score: rgba(231, 121, 31, 0.5);
+            --high-score: rgba(236, 38, 38, 0.5);
+            background: linear-gradient(
+                to right,
+                var(--high-score),
+                var(--mild-score),
+                var(--crap-score),
+                beige,
+                var(--crap-score),
+                var(--mild-score),
+                var(--high-score)
+            );
+        }
+
+        #field::after {
+            content: "";
+            position: absolute;
+            bottom: 0;
+            height: 50vh;
+            width: 100%;
+
+            background: linear-gradient(to bottom, transparent, transparent, white);
+
+            pointer-events: none;
+        }
+
+        #hand {
+            --extra-render-space: 4em;
+
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+
+            display: flex;
+            justify-content: center;
+            align-self: stretch;
+
+            padding-top: var(--extra-render-space);
+
+            overflow: hidden;
+        }
+
+        #hand > :first-child {
+            transform: rotate(-20deg);
+        }
+
+        #hand > * {
+            transform: translateY(-1em);
+            transform-origin: 50% 0;
+
+            transition: transform 0.2s ease-out;
+        }
+
+        #hand > :last-child {
+            transform: rotate(20deg);
+        }
+
+        #hand > *:hover {
+            transform: translateY(-2em);
+        }
+
+        #score, #discard {
+            position: absolute;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            bottom: 0;
+            width: 10em;
+
+            margin: 2em;
+
+            border-radius: var(--border-radius);
+        }
+
+        #score {
+            right: 100%;
+
+            background: rgba(0, 0, 0, 0.2);
+        }
+
+        #discard {
+            left: 100%;
+
+            background: rgba(255, 0, 0, 0.33);
+            border: 2px dashed red;
+        }
+
+        #discard.dropping {
+            background: rgba(255, 0, 0, 0.67);
+            border-style: solid;
+        }
+
+        #gameover {
+            position: fixed;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+
+            display: flex;
+            align-items: center;
+            justify-content: center;
+
+            padding: 1em;
+
+            background: rgba(0, 0, 0, 0.4);
+
+            z-index: 10;
+        }
+
+        #gameover .body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+
+            padding: 1em;
+
+            background: white;
+            border-radius: var(--border-radius);
+        }
+
+
+    </style>
+</head>
+<body>
+
+<h1>Pipes All the Way Down</h1>
+<noscript>This games requires JavaScript to function.</noscript>
+<div id="field">
+</div>
+<div id="hand">
+</div>
+<div id="score">
+    <h2>Score</h2>
+    <h3 class="value">0</h3>
+</div>
+<div id="discard">
+    <h2>Discard</h2>
+    <h3>(costs 50 score)</h3>
+</div>
+
+<div id="gameover" style="display: none">
+    <div class="body">
+        <h1>Game Over</h1>
+        <h2>Final Score</h2>
+        <h2 class="score"></h2>
+    </div>
+</div>
+
+<template id="game-score-heading">
+    <style>
+        :host {
+            position: sticky;
+            top: 0;
+
+            padding: 0.5em;
+
+            text-align: center;
+            background: linear-gradient(to bottom, white, white, transparent);
+            z-index: 1;
+        }
+    </style>
+</template>
+<template id="game-slot">
+    <style id="positioning"></style>
+    <style>
+        :host {
+            display: flex;
+        }
+
+        .placeholder {
+            flex: 1;
+
+            background: rgba(135, 206, 250, 0.67);
+            border: 2px dashed dodgerblue;
+            border-radius: var(--border-radius);
+        }
+
+        .placeholder.dropping {
+            background: rgba(72, 198, 128, 0.67);
+            border-color: mediumseagreen;
+            border-style: solid;
+        }
+    </style>
+    <slot>
+        <div class="placeholder"></div>
+    </slot>
+</template>
+<template id="game-goal">
+    <svg viewBox="-1 -1 8 8">
+        <polygon points="0,2 5,6 3,0 1,6 6,2" fill="currentColor"/>
+    </svg>
+</template>
+<template id="game-left">
+    <svg viewBox="-1 -1 4 4">
+        <polygon points="2,0 2,2 0,1" fill="currentColor"/>
+    </svg>
+</template>
+<template id="game-right">
+    <svg viewBox="-1 -1 4 4">
+        <polygon points="0,0 0,2 2,1" fill="currentColor"/>
+    </svg>
+</template>
+<template id="game-straight">
+    <svg viewBox="-1 -1 4 4">
+        <polygon points="0,0 2,0 1,2" fill="currentColor"/>
+    </svg>
+</template>
+<template id="game-split">
+    <svg viewBox="-2 -2 6 6">
+        <polygon points="-1,1 0,2 2,2 3,1 2,0 0,0" fill="currentColor"/>
+    </svg>
+</template>
+<template id="game-card">
+    <style>
+        :host {
+            display: inline-flex;
+            flex-direction: column;
+            align-items: center;
+            width: 6em;
+            height: 8em;
+
+            padding: 1em;
+
+            background: white;
+            border-radius: var(--border-radius);
+            box-shadow:
+                    0 0 1em rgba(0, 0, 0, 0.2),
+                    0 0 0.5em rgba(0, 0, 0, 0.1),
+                    0 0 0.25em rgba(0, 0, 0, 0.1);
+
+            cursor: grab;
+        }
+    </style>
+    <slot name="preview"></slot>
+    <slot name="label"></slot>
+</template>
+<script>
+    /**
+     * @function ElementCallback
+     * @this HTMLElement
+     * @return void
+     * */
+
+    /**
+     * @param {string} name
+     * @param {{
+     *     init?: ElementCallback,
+     *     connectedCallback?: ElementCallback,
+     *     disconnectedCallback?: ElementCallback,
+     *     adoptedCallback?: ElementCallback,
+     *     attributeChangedCallback?: ElementCallback,
+     * }} options
+     * @param {string[]?} attributes
+     * @return {function(object?): HTMLElement}
+     */
+    function defineGameElement(name, options, attributes) {
+        class Class extends HTMLElement {
+            static observedAttributes = attributes;
+
+            constructor() {
+                super();
+
+                this.attachShadow({
+                    mode: "open",
+                });
+
+                const template = document.getElementById(name);
+                this.shadowRoot.appendChild(template.content.cloneNode(true));
+
+                Object.assign(this, options);
+
+                if (attributes instanceof Array) {
+                    for (const attribute of attributes) {
+                        Object.defineProperty(this, attribute, {
+                            get() {
+                                return this.getAttribute(attribute);
+                            },
+                            set(value) {
+                                this.setAttribute(attribute, value);
+                            }
+                        });
+                    }
+                }
+
+                if (typeof this.init === "function") {
+                    this.init();
+                }
+            }
+        }
+
+
+        Object.assign(Class.prototype, options);
+
+        customElements.define(name, Class);
+
+        return attributes => {
+            const element = document.createElement(name);
+            Object.assign(element, attributes);
+            return element;
+        };
+    }
+
+
+    /**
+     * @param {Element} element
+     * @param {string} value
+     * */
+    function setFirstText(element, value) {
+        if (element.firstChild.nodeType === Node.TEXT_NODE) {
+            element.firstChild.textContent = value;
+        } else {
+            element.insertBefore(element.ownerDocument.createTextNode(value), element.firstChild);
+        }
+    }
+
+    function extractGameDropEvent(event) {
+        const raw = event.dataTransfer.getData("application/json");
+        if (raw == null) {
+            return null;
+        }
+
+        const data = JSON.parse(raw);
+        if (typeof data.event !== "string" || !data.event.startsWith(DRAG_EVENT_PREFIX)) {
+            return null;
+        }
+
+        return data;
+    }
+
+    /**
+     * @param {Element} element
+     * @param {function(object): void} onDrop
+     * */
+    function makeIntoDropZone(element, onDrop) {
+        element.addEventListener("drop", event => {
+            const gameEvent = extractGameDropEvent(event);
+            if (gameEvent == null) {
+                return;
+            }
+
+            element.classList.remove("dropping");
+            event.preventDefault();
+
+            onDrop(gameEvent);
+        });
+
+        element.addEventListener("dragover", event => {
+            const gameEvent = extractGameDropEvent(event);
+            if (gameEvent == null) {
+                return;
+            }
+
+            const isPlacement = gameEvent.event === PLACE_EVENT;
+            element.classList.toggle("dropping", isPlacement);
+            event.preventDefault();
+        });
+
+        element.addEventListener("dragleave", () => {
+            element.classList.remove("dropping");
+        });
+    }
+</script>
+<script>
+    /** @type {HTMLDivElement} */
+    const GAME_OVER_SCREEN = document.querySelector("#gameover");
+    const SCORE = document.querySelector("#score .value");
+    const FIELD = document.getElementById("field");
+    const HAND = document.getElementById("hand");
+    const DRAG_EVENT_PREFIX = "pipes-all-the-way-down:";
+    const PLACE_EVENT = DRAG_EVENT_PREFIX + "place";
+    const DISCARD_EVENT = DRAG_EVENT_PREFIX + "discard";
+    const SCORE_CHANGE_EVENT = DRAG_EVENT_PREFIX + "over";
+    const GAME_OVER_EVENT = DRAG_EVENT_PREFIX + "score";
+
+    const ScoreHeading = defineGameElement("game-score-heading", {
+        attributeChangedCallback(name, _, newValue) {
+            if (name === "value") {
+                setFirstText(this.shadowRoot, newValue);
+            }
+        }
+    }, ["value"]);
+
+    const Goal = defineGameElement("game-goal", {});
+    const Left = defineGameElement("game-left", {});
+    const Right = defineGameElement("game-right", {});
+    const Straight = defineGameElement("game-straight", {});
+    const Split = defineGameElement("game-split", {});
+
+    const Slot = defineGameElement("game-slot", {
+        init() {
+            const placeholder = this.shadowRoot.querySelector(".placeholder");
+
+            makeIntoDropZone(placeholder, ({event: eventName, ...data}) => {
+                this.classList.add("populated");
+                this.dispatchEvent(new CustomEvent(eventName, {
+                    bubbles: true,
+                    detail: data,
+                }));
+            })
+        },
+        attributeChangedCallback() {
+            this.shadowRoot.getElementById("positioning")
+                // language=CSS
+                .innerText = `
+                    :host {
+                        grid-row: ${this.getAttribute("y")};
+                        grid-column: ${this.getAttribute("x")};
+                    }
+                `;
+        }
+    }, ["x", "y"]);
+
+    const Card = defineGameElement("game-card", {
+        init() {
+
+            this.addEventListener("dragstart", event => {
+                event.dataTransfer.setData("text/plain", "Oops, drag this in the game window!");
+                event.dataTransfer.setData("application/json", JSON.stringify({
+                    event: PLACE_EVENT,
+                    card: this.id,
+                    piece: this.piece,
+                }));
+                event.dataTransfer.dropEffect = "move";
+            });
+        },
+        connectedCallback() {
+            if (this.isConnected) {
+                this.draggable = true;
+
+                if (this.id == null || this.id === "") {
+                    this.id = Math.random().toString(16);
+                }
+            }
+        }
+    }, ["piece"]);
+
+    makeIntoDropZone(document.getElementById("discard"), ({eventName, ...data}) => {
+        this.dispatchEvent(new CustomEvent(DISCARD_EVENT, {
+            bubbles: true,
+            detail: data,
+        }));
+    })
+</script>
+<script>
+    /**
+     * @param {Object.<string, {likelihood: number}>} obj
+     * @return {string}
+     * */
+    function createRandomKeyGenerator(obj) {
+        const range = Object.values(obj).reduce((acc, x) => acc + x.likelihood, 0);
+        const entries = Object.entries(obj);
+
+        return function() {
+            const target = Math.random() * range;
+
+            let soFar = 0;
+            for (const [key, value] of entries) {
+                if (soFar < target && soFar + value.likelihood > target) {
+                    return key;
+                }
+
+                soFar += value.likelihood;
+            }
+
+            return entries[entries.length - 1][0];
+        }
+    }
+
+    /**
+     * @param {Element} element
+     * @param {string | null} filter
+     * @param {function(number): void} callback
+     * */
+    function observeElementCount(element, filter, callback) {
+        const observer = new MutationObserver(() => {
+            const set = new Set();
+
+            const items = filter == null
+                ? element.childNodes
+                : element.querySelectorAll(filter);
+
+            for (const node of items) {
+                if (node instanceof Element) {
+                    set.add(node);
+                }
+            }
+
+            callback(set.size);
+        });
+
+        observer.observe(element, { childList: true, subtree: true });
+    }
+</script>
+<script>
+    const CARDS_PER_HAND = 3;
+    const COLUMN_SCORES = [50, 10, 5, 1, 5, 10, 50];
+    const PIECES = {
+        "Goal": {
+            create: Goal,
+            likelihood: .1,
+            neighbours: [
+                [-1, 0],
+                [1, 0],
+                [0, 1],
+            ],
+        },
+        "Left": {
+            create: Left,
+            likelihood: 1,
+            neighbours: [
+                [-1, 0],
+            ],
+        },
+        "Right": {
+            create: Right,
+            likelihood: 1,
+            neighbours: [
+                [1, 0],
+            ],
+        },
+        "Straight": {
+            create: Straight,
+            likelihood: 1.5,
+            neighbours: [
+                [0, 1],
+            ],
+        },
+        "Split": {
+            create: Split,
+            likelihood: .5,
+            neighbours: [
+                [-1, 0],
+                [1, 0],
+            ],
+        },
+    };
+
+    function seedField(scores) {
+        for (const score of scores) {
+            FIELD.appendChild(ScoreHeading({
+                value: score.toString(),
+            }));
+        }
+
+        FIELD.appendChild(Slot({
+            x: Math.ceil(COLUMN_SCORES.length / 2),
+            y: 2
+        }));
+    }
+
+    function deal(dealer, amount) {
+        for (let i = 0; i < amount; ++i) {
+            const name = dealer();
+
+            const card = Card({
+                piece: name
+            });
+
+            const piece = PIECES[name].create({
+                slot: "preview",
+            });
+
+            const label = document.createElement("span");
+            label.slot = "label";
+            label.innerText = name;
+
+            card.appendChild(piece);
+            card.appendChild(label);
+            HAND.appendChild(card);
+        }
+    }
+
+    (async function game() {
+        const dealer = createRandomKeyGenerator(PIECES);
+
+        window.addEventListener(GAME_OVER_EVENT, () => {
+            GAME_OVER_SCREEN.style.display = null;
+            GAME_OVER_SCREEN.querySelector(".score").innerText = SCORE.innerText;
+        })
+
+        window.addEventListener(SCORE_CHANGE_EVENT, event => {
+            const oldValue = parseInt(SCORE.innerText);
+            const delta = event.detail;
+            const newValue = oldValue + delta;
+
+            SCORE.innerText = newValue;
+
+            if (newValue <= 0) {
+                window.dispatchEvent(new CustomEvent(GAME_OVER_EVENT));
+            }
+        });
+
+        window.addEventListener(DISCARD_EVENT, event => {
+            document.getElementById(event.detail.card).remove();
+
+            window.dispatchEvent(new CustomEvent(SCORE_CHANGE_EVENT, {
+                detail: -50,
+            }));
+        });
+
+        window.addEventListener(PLACE_EVENT, event => {
+            document.getElementById(event.detail.card).remove();
+
+            const pieceDescription = PIECES[event.detail.piece];
+
+            for (const [deltaX, deltaY] of pieceDescription.neighbours) {
+                const x = parseInt(event.target.x) + deltaX;
+                const y = parseInt(event.target.y) + deltaY;
+
+                if (FIELD.querySelector(`[x="${x}"][y="${y}"]`)) {
+                    continue;
+                }
+
+                if (x <= 0 || x > COLUMN_SCORES.length) {
+                    continue;
+                }
+
+                const placeholder = Slot({x, y});
+                FIELD.appendChild(placeholder);
+            }
+
+            const piece = pieceDescription.create();
+            event.target.appendChild(piece);
+
+            window.dispatchEvent(new CustomEvent(SCORE_CHANGE_EVENT, {
+                detail: COLUMN_SCORES[parseInt(event.target.x) - 1],
+            }));
+
+            window.scroll({
+                top: 1000,
+                behavior: "smooth",
+            });
+        });
+
+        observeElementCount(HAND, null, count => {
+            if (count === 0) {
+                deal(dealer, CARDS_PER_HAND);
+            }
+        });
+
+        let willFail = false;
+        observeElementCount(FIELD, "game-slot:not(.populated)", count => {
+            console.log(count);
+            willFail = count === 0;
+            setTimeout(() => {
+                if (willFail) {
+                    window.dispatchEvent(new CustomEvent(GAME_OVER_EVENT));
+                }
+            }, 500);
+        });
+
+        seedField(COLUMN_SCORES);
+        deal(dealer, CARDS_PER_HAND);
+    })();
+</script>
+</body>
+</html>

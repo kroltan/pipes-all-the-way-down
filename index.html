@@ -17,6 +17,7 @@
 
             font-family: sans-serif;
             user-select: none;
+            overflow: hidden;
         }
 
         body {
@@ -578,7 +579,7 @@
     const PIECES = {
         "Goal": {
             create: Goal,
-            likelihood: .1,
+            likelihood: .2,
             neighbours: [
                 [-1, 0],
                 [1, 0],
@@ -608,7 +609,7 @@
         },
         "Split": {
             create: Split,
-            likelihood: .5,
+            likelihood: .8,
             neighbours: [
                 [-1, 0],
                 [1, 0],
@@ -708,7 +709,7 @@
             }));
 
             window.scroll({
-                top: 1000,
+                top: document.body.scrollHeight,
                 behavior: "smooth",
             });
         });
@@ -721,7 +722,6 @@
 
         let willFail = false;
         observeElementCount(FIELD, "game-slot:not(.populated)", count => {
-            console.log(count);
             willFail = count === 0;
             setTimeout(() => {
                 if (willFail) {
